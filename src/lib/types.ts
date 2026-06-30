@@ -31,6 +31,13 @@ export interface Entry {
   createdAt: number;
   /** Who logged the entry — admin from the dashboard or a key-holding user. */
   source: "admin" | "user";
+  /** Identity of the person who created this entry. */
+  userId?: string;
+  userName?: string;
+  userColor?: string;
+  /** Optional file attachment stored in Firebase Storage. */
+  attachmentUrl?: string;
+  attachmentName?: string;
 }
 
 export type EntryInput = {
@@ -38,6 +45,8 @@ export type EntryInput = {
   category: string;
   date: string;
   note: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
 };
 
 export interface UserProfile {
@@ -46,4 +55,44 @@ export interface UserProfile {
   role: "admin" | "user";
   assignedProjectIds: string[];
   createdAt: number;
+}
+
+/** Stable identity for whoever is viewing a project (admin or public key-holder). */
+export interface UserIdentity {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** A single budget contribution entry for one member. */
+export interface BudgetEntry {
+  id: string;
+  projectId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  amount: number;
+  note: string;
+  date: string;
+  /** Optional file attachment stored in Firebase Storage. */
+  attachmentUrl?: string;
+  attachmentName?: string;
+  createdAt: number;
+}
+
+export type BudgetEntryInput = {
+  amount: number;
+  note: string;
+  date: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+};
+
+/** Denormalized member record for fast avatar lookups. */
+export interface ProjectMember {
+  userId: string;
+  name: string;
+  color: string;
+  source: "admin" | "user";
+  joinedAt: number;
 }

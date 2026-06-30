@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, KeyRound, Pencil, Trash2 } from "lucide-react";
-import type { Project } from "@/lib/types";
+import { subscribeMembers } from "@/lib/budget";
+import type { Project, ProjectMember } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { BudgetBar } from "@/components/BudgetBar";
 import { CopyButton } from "@/components/CopyButton";
+import { MemberAvatars } from "./MemberAvatars";
 
 export function ProjectCard({
   project,
@@ -16,8 +19,14 @@ export function ProjectCard({
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
 }) {
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+
+  useEffect(() => {
+    return subscribeMembers(project.id, setMembers);
+  }, [project.id]);
+
   return (
-    <Card className="group flex flex-col p-5 transition-shadow hover:shadow-[var(--shadow-card)]">
+    <Card className="group flex flex-col p-5 transition-shadow hover:shadow-(--shadow-card)">
       <div className="flex items-start justify-between gap-3">
         <Link href={`/admin/projects/${project.id}`} className="min-w-0">
           <h3 className="truncate text-lg font-bold text-ink transition-colors group-hover:text-brand-700">
@@ -47,7 +56,16 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="mt-5">
+      {members.length > 0 && (
+        <div className="mt-3 flex items-center gap-2">
+          <MemberAvatars members={members} />
+          <span className="text-xs text-muted">
+            {members.length} {members.length === 1 ? "member" : "members"}
+          </span>
+        </div>
+      )}
+
+      <div className="mt-4">
         <BudgetBar
           spent={project.spent}
           budget={project.budget}

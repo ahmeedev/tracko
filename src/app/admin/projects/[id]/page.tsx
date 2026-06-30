@@ -15,8 +15,10 @@ import {
   subscribeProject,
   updateProject,
 } from "@/lib/projects";
+import { adminIdentity } from "@/lib/identity";
 import { formatDate } from "@/lib/format";
-import type { Project, ProjectInput } from "@/lib/types";
+import type { Project, ProjectInput, UserIdentity } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -38,6 +40,7 @@ export default function AdminProjectPage() {
 function ProjectDetail() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const id = params.id;
 
   const [project, setProject] = useState<Project | null>(null);
@@ -57,6 +60,10 @@ function ProjectDetail() {
     );
     return unsub;
   }, [id]);
+
+  const identity: UserIdentity | null = user
+    ? adminIdentity(user.uid, user.email ?? "admin")
+    : null;
 
   async function handleSave(input: ProjectInput) {
     if (project) await updateProject(project.id, input);
@@ -120,7 +127,9 @@ function ProjectDetail() {
 
       <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
         <div className="lg:order-1">
-          <ProjectWorkspace project={project} source="admin" />
+          {identity && (
+            <ProjectWorkspace project={project} source="admin" identity={identity} />
+          )}
         </div>
         <div className="space-y-6 lg:order-2">
           <ShareKeyPanel project={project} />

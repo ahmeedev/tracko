@@ -6,13 +6,15 @@ import Link from "next/link";
 import { KeyRound, LogOut, SearchX } from "lucide-react";
 import { subscribeProjectByKey } from "@/lib/projects";
 import { normalizeShareKey } from "@/lib/keys";
-import type { Project } from "@/lib/types";
+import { getStoredIdentity } from "@/lib/identity";
+import type { Project, UserIdentity } from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
 import { FullPageLoader } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/EmptyState";
 import { CopyButton } from "@/components/CopyButton";
 import { ProjectWorkspace } from "@/components/projects/ProjectWorkspace";
+import { IdentitySetup } from "@/components/projects/IdentitySetup";
 
 export default function SharedProjectPage() {
   const params = useParams<{ key: string }>();
@@ -20,6 +22,7 @@ export default function SharedProjectPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [identity, setIdentity] = useState<UserIdentity | null>(null);
 
   useEffect(() => {
     if (!key) {
@@ -31,6 +34,10 @@ export default function SharedProjectPage() {
       (next) => {
         setProject(next);
         setLoading(false);
+        if (next) {
+          const stored = getStoredIdentity(next.id);
+          setIdentity(stored);
+        }
       },
       () => setLoading(false)
     );
@@ -92,7 +99,18 @@ export default function SharedProjectPage() {
             </div>
 
             <div className="mt-7">
-              <ProjectWorkspace project={project} source="user" />
+              {identity ? (
+                <ProjectWorkspace
+                  project={project}
+                  source="user"
+                  identity={identity}
+                />
+              ) : (
+                <IdentitySetup
+                  projectId={project.id}
+                  onDone={setIdentity}
+                />
+              )}
             </div>
           </>
         )}

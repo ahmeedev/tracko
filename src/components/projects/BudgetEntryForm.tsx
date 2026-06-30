@@ -7,42 +7,28 @@ import { FieldError, Input, Label, Textarea } from "@/components/ui/Field";
 import { FileAttachmentField } from "@/components/ui/FileAttachmentField";
 import { uploadAttachment } from "@/lib/storage";
 import { todayISO } from "@/lib/format";
-import type { Entry, EntryInput } from "@/lib/types";
+import type { BudgetEntry, BudgetEntryInput } from "@/lib/types";
 
-const SUGGESTED_CATEGORIES = [
-  "Design",
-  "Development",
-  "Software",
-  "Travel",
-  "Marketing",
-  "Salaries",
-  "Equipment",
-  "Office",
-  "Misc",
-];
-
-interface EntryFormProps {
+interface BudgetEntryFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (input: EntryInput) => Promise<void>;
-  currencySymbol: string;
+  onSave: (input: BudgetEntryInput) => Promise<void>;
   projectId: string;
-  /** Provide to edit an existing entry; omit to add a new one. */
-  entry?: Entry | null;
+  currencySymbol: string;
+  entry?: BudgetEntry | null;
 }
 
-export function EntryForm({
+export function BudgetEntryForm({
   open,
   onClose,
   onSave,
-  currencySymbol,
   projectId,
+  currencySymbol,
   entry,
-}: EntryFormProps) {
+}: BudgetEntryFormProps) {
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("");
-  const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
+  const [date, setDate] = useState(todayISO());
   const [file, setFile] = useState<File | null>(null);
   const [existingUrl, setExistingUrl] = useState<string | undefined>();
   const [existingName, setExistingName] = useState<string | undefined>();
@@ -52,9 +38,8 @@ export function EntryForm({
   useEffect(() => {
     if (!open) return;
     setAmount(entry ? String(entry.amount) : "");
-    setCategory(entry?.category ?? "");
-    setDate(entry?.date ?? todayISO());
     setNote(entry?.note ?? "");
+    setDate(entry?.date ?? todayISO());
     setFile(null);
     setExistingUrl(entry?.attachmentUrl);
     setExistingName(entry?.attachmentName);
@@ -66,7 +51,6 @@ export function EntryForm({
     const amountValue = Number(amount);
     if (Number.isNaN(amountValue) || amountValue <= 0)
       return setError("Enter an amount greater than 0.");
-    if (!category.trim()) return setError("Pick or type a category.");
     if (!date) return setError("Choose a date.");
 
     setError("");
@@ -76,7 +60,7 @@ export function EntryForm({
       let attachmentName = existingName;
 
       if (file) {
-        const result = await uploadAttachment(projectId, "entries", file);
+        const result = await uploadAttachment(projectId, "budgetEntries", file);
         attachmentUrl = result.url;
         attachmentName = result.name;
       } else if (!existingUrl) {
@@ -86,9 +70,8 @@ export function EntryForm({
 
       await onSave({
         amount: amountValue,
-        category: category.trim(),
-        date,
         note: note.trim(),
+        date,
         attachmentUrl,
         attachmentName,
       });
@@ -104,21 +87,23 @@ export function EntryForm({
     <Modal
       open={open}
       onClose={onClose}
-      title={entry ? "Edit expense" : "Add expense"}
+      title={entry ? "Edit budget entry" : "Add budget"}
       description={
-        entry ? "Update this expense entry." : "Log a new expense for this project."
+        entry
+          ? "Update this budget entry."
+          : "Add to your personal budget for this project."
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="e-amount">Amount</Label>
+            <Label htmlFor="b-amount">Amount</Label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">
                 {currencySymbol}
               </span>
               <Input
-                id="e-amount"
+                id="b-amount"
                 type="number"
                 min="0"
                 step="0.01"
@@ -133,9 +118,9 @@ export function EntryForm({
             </div>
           </div>
           <div>
-            <Label htmlFor="e-date">Date</Label>
+            <Label htmlFor="b-date">Date</Label>
             <Input
-              id="e-date"
+              id="b-date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -144,26 +129,10 @@ export function EntryForm({
           </div>
         </div>
         <div>
-          <Label htmlFor="e-category">Category</Label>
-          <Input
-            id="e-category"
-            list="entry-categories"
-            placeholder="e.g. Software"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            required
-          />
-          <datalist id="entry-categories">
-            {SUGGESTED_CATEGORIES.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-        </div>
-        <div>
-          <Label htmlFor="e-note">Note (optional)</Label>
+          <Label htmlFor="b-note">Note (optional)</Label>
           <Textarea
-            id="e-note"
-            placeholder="What was this expense for?"
+            id="b-note"
+            placeholder="e.g. Initial project allocation"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -184,7 +153,7 @@ export function EntryForm({
             Cancel
           </Button>
           <Button type="submit" loading={saving}>
-            {entry ? "Save changes" : "Add expense"}
+            {entry ? "Save changes" : "Add budget"}
           </Button>
         </div>
       </form>

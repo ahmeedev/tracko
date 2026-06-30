@@ -8,7 +8,8 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Entry, EntryInput } from "./types";
+import { upsertMember } from "./budget";
+import type { Entry, EntryInput, UserIdentity } from "./types";
 
 function entriesCol(projectId: string) {
   return collection(db, "projects", projectId, "entries");
@@ -28,6 +29,11 @@ function mapEntry(
     note: data.note ?? "",
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
     source: data.source === "admin" ? "admin" : "user",
+    userId: data.userId ?? undefined,
+    userName: data.userName ?? undefined,
+    userColor: data.userColor ?? undefined,
+    attachmentUrl: data.attachmentUrl ?? undefined,
+    attachmentName: data.attachmentName ?? undefined,
   };
 }
 
@@ -43,7 +49,6 @@ export function subscribeEntries(
       const entries = snap.docs
         .map((d) => mapEntry(projectId, d))
         .sort((a, b) => {
-          // Sort by expense date, then by creation time as a tiebreaker.
           if (a.date !== b.date) return a.date < b.date ? 1 : -1;
           return b.createdAt - a.createdAt;
         });
@@ -55,16 +60,27 @@ export function subscribeEntries(
 
 /**
  * Adds an entry and atomically bumps the project's denormalized `spent` total.
- * Both writes happen in one batch so the dashboard stays consistent.
+ * Also upserts the member record so the user appears in avatar lists.
  */
 export async function addEntry(
   projectId: string,
   input: EntryInput,
-  source: Entry["source"]
+  source: Entry["source"],
+  identity?: UserIdentity
 ): Promise<string> {
+  if (identity) {
+    await upsertMember(projectId, identity, source);
+  }
   const entryRef = doc(entriesCol(projectId));
   const batch = writeBatch(db);
-  batch.set(entryRef, { ...input, source, createdAt: Date.now() });
+  batch.set(entryRef, {
+    ...input,
+    source,
+    userId: identity?.id ?? null,
+    userName: identity?.name ?? null,
+    userColor: identity?.color ?? null,
+    createdAt: Date.now(),
+  });
   batch.update(doc(db, "projects", projectId), {
     spent: increment(input.amount),
   });
