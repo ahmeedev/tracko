@@ -8,36 +8,37 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  type User,
-} from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { cognitoSignIn, cognitoSignOut, getCurrentSession } from "@/lib/cognito";
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? "";
 
+export interface AppUser {
+  uid: string;
+  email: string;
+}
+
 interface AuthContextValue {
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
   isAdmin: boolean;
-  signIn: (email: string, password: string) => Promise<User>;
+  signIn: (email: string, password: string) => Promise<AppUser>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
+    getCurrentSession().then((session) => {
+      if (session) {
+        const payload = session.getIdToken().decodePayload();
+        setUser({ uid: payload.sub as string, email: payload.email as string });
+      }
       setLoading(false);
     });
-    return unsubscribe;
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -46,10 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isAdmin: !!(user && ADMIN_EMAIL && user.email === ADMIN_EMAIL),
       signIn: async (email, password) => {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
-        return cred.user;
+        const info = await cognitoSignIn(email, password);
+        const appUser: AppUser = { uid: info.sub, email: info.email };
+        setUser(appUser);
+        return appUser;
       },
-      signOut: () => firebaseSignOut(auth),
+      signOut: async () => {
+        await cognitoSignOut();
+        setUser(null);
+      },
     }),
     [user, loading]
   );

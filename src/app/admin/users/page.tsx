@@ -160,7 +160,7 @@ function UsersManager() {
         title="Delete user?"
         description={
           deleteTarget
-            ? `"${deleteTarget.email}" will be removed. This does not delete their Firebase Auth account — remove it manually in the Firebase Console if needed.`
+            ? `"${deleteTarget.email}" will be permanently removed from both Cognito and the database.`
             : ""
         }
         confirmLabel="Delete user"

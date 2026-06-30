@@ -54,7 +54,7 @@ export function createIdentity(projectId: string, name: string): UserIdentity {
   return identity;
 }
 
-/** Builds a stable admin identity from Firebase Auth user info. */
+/** Builds a stable admin identity from the authenticated user's info. */
 export function adminIdentity(uid: string, email: string): UserIdentity {
   const name = email.split("@")[0] ?? "Admin";
   return { id: uid, name, color: "#6366F1" };

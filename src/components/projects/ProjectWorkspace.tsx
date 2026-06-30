@@ -12,11 +12,13 @@ import {
 } from "lucide-react";
 import { subscribeEntries, addEntry, updateEntry, deleteEntry } from "@/lib/entries";
 import { currencySymbol, formatCurrency, formatDate } from "@/lib/format";
+import { attachmentHref } from "@/lib/storage";
 import type { Entry, EntryInput, Project, UserIdentity } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
+import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/EmptyState";
 import { BudgetBar } from "@/components/BudgetBar";
 import { EntryForm } from "@/components/entries/EntryForm";
@@ -49,8 +51,11 @@ export function ProjectWorkspace({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState<Entry | null>(null);
+  const [tab, setTab] = useState<"expenses" | "budget">("expenses");
 
   const symbol = currencySymbol(project.currency);
+
+  const accessOpts = source === "user" ? { shareKey: project.shareKey } : undefined;
 
   useEffect(() => {
     const unsub = subscribeEntries(
@@ -59,10 +64,12 @@ export function ProjectWorkspace({
         setEntries(next);
         setLoading(false);
       },
-      () => setLoading(false)
+      () => setLoading(false),
+      accessOpts
     );
     return unsub;
-  }, [project.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, source]);
 
   const spent = useMemo(
     () => entries.reduce((sum, e) => sum + e.amount, 0),
@@ -93,14 +100,14 @@ export function ProjectWorkspace({
 
   async function handleSave(input: EntryInput) {
     if (editing) {
-      await updateEntry(project.id, editing.id, input, editing.amount);
+      await updateEntry(project.id, editing.id, input, editing.amount, accessOpts);
     } else {
-      await addEntry(project.id, input, source, identity);
+      await addEntry(project.id, input, source, identity, accessOpts);
     }
   }
 
   async function handleDelete() {
-    if (deleting) await deleteEntry(project.id, deleting.id, deleting.amount);
+    if (deleting) await deleteEntry(project.id, deleting.id, deleting.amount, accessOpts);
   }
 
   return (
@@ -167,102 +174,114 @@ export function ProjectWorkspace({
         </CardBody>
       </Card>
 
-      {/* Per-user budgets */}
-      <BudgetSection project={project} identity={identity} source={source} />
+      {/* Expenses / Budget tabs */}
+      <Tabs
+        tabs={[
+          { value: "expenses", label: "Expenses", icon: <Receipt className="size-4" /> },
+          { value: "budget", label: "Budget", icon: <Wallet className="size-4" /> },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as "expenses" | "budget")}
+      />
 
-      {/* Expenses */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-ink">Expenses</h2>
-            <p className="text-sm text-muted">
-              {entries.length} {entries.length === 1 ? "entry" : "entries"} logged
-            </p>
+      {tab === "budget" && (
+        <BudgetSection project={project} identity={identity} source={source} />
+      )}
+
+      {tab === "expenses" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-ink">Expenses</h2>
+              <p className="text-sm text-muted">
+                {entries.length} {entries.length === 1 ? "entry" : "entries"} logged
+              </p>
+            </div>
+            <Button onClick={openAdd}>
+              <Plus className="size-4" /> Add expense
+            </Button>
           </div>
-          <Button onClick={openAdd}>
-            <Plus className="size-4" /> Add expense
-          </Button>
+
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Spinner className="size-7" />
+            </div>
+          ) : entries.length === 0 ? (
+            <EmptyState
+              icon={Receipt}
+              title="No expenses yet"
+              description="Add the first expense to start tracking this project's spend against its budget."
+              action={
+                <Button onClick={openAdd}>
+                  <Plus className="size-4" /> Add expense
+                </Button>
+              }
+            />
+          ) : (
+            <Card className="overflow-hidden">
+              <ul className="divide-y divide-line">
+                {entries.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-brand-50/40"
+                  >
+                    {entry.userName && entry.userColor && (
+                      <UserAvatar name={entry.userName} color={entry.userColor} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-ink">{entry.category}</span>
+                        {entry.source === "admin" ? (
+                          <Badge tone="brand">Admin</Badge>
+                        ) : (
+                          <Badge tone="neutral">Team</Badge>
+                        )}
+                        {entry.userName && (
+                          <span className="text-xs text-muted">{entry.userName}</span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm text-muted">
+                          {entry.note || "No note"} · {formatDate(entry.date)}
+                        </span>
+                        {entry.attachmentUrl && (
+                          <a
+                            href={attachmentHref(entry.attachmentUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
+                          >
+                            <FileText className="size-3" />{" "}
+                            {entry.attachmentName ?? "Attachment"}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-base font-bold text-ink">
+                      {formatCurrency(entry.amount, project.currency)}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <IconButton
+                        label="Edit entry"
+                        onClick={() => openEdit(entry)}
+                      >
+                        <Pencil className="size-4" />
+                      </IconButton>
+                      <IconButton
+                        label="Delete entry"
+                        danger
+                        onClick={() => setDeleting(entry)}
+                      >
+                        <Trash2 className="size-4" />
+                      </IconButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
-
-        {loading ? (
-          <div className="flex justify-center py-16">
-            <Spinner className="size-7" />
-          </div>
-        ) : entries.length === 0 ? (
-          <EmptyState
-            icon={Receipt}
-            title="No expenses yet"
-            description="Add the first expense to start tracking this project's spend against its budget."
-            action={
-              <Button onClick={openAdd}>
-                <Plus className="size-4" /> Add expense
-              </Button>
-            }
-          />
-        ) : (
-          <Card className="overflow-hidden">
-            <ul className="divide-y divide-line">
-              {entries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-brand-50/40"
-                >
-                  {entry.userName && entry.userColor && (
-                    <UserAvatar name={entry.userName} color={entry.userColor} />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-ink">{entry.category}</span>
-                      {entry.source === "admin" ? (
-                        <Badge tone="brand">Admin</Badge>
-                      ) : (
-                        <Badge tone="neutral">Team</Badge>
-                      )}
-                      {entry.userName && (
-                        <span className="text-xs text-muted">{entry.userName}</span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm text-muted">
-                        {entry.note || "No note"} · {formatDate(entry.date)}
-                      </span>
-                      {entry.attachmentUrl && (
-                        <a
-                          href={entry.attachmentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
-                        >
-                          <FileText className="size-3" />{" "}
-                          {entry.attachmentName ?? "Attachment"}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-base font-bold text-ink">
-                    {formatCurrency(entry.amount, project.currency)}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <IconButton
-                      label="Edit entry"
-                      onClick={() => openEdit(entry)}
-                    >
-                      <Pencil className="size-4" />
-                    </IconButton>
-                    <IconButton
-                      label="Delete entry"
-                      danger
-                      onClick={() => setDeleting(entry)}
-                    >
-                      <Trash2 className="size-4" />
-                    </IconButton>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-      </div>
+      )}
 
       <EntryForm
         open={formOpen}
@@ -270,6 +289,7 @@ export function ProjectWorkspace({
         onSave={handleSave}
         currencySymbol={symbol}
         projectId={project.id}
+        shareKey={accessOpts?.shareKey}
         entry={editing}
       />
       <ConfirmDialog

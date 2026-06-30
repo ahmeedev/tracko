@@ -1,140 +1,115 @@
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  query,
-  updateDoc,
-  where,
-  writeBatch,
-  type DocumentData,
-  type QueryDocumentSnapshot,
-} from "firebase/firestore";
-import { db } from "./firebase";
-import { generateShareKey } from "./keys";
+import { apiJson, apiFetch } from "./api-client";
 import type { Project, ProjectInput } from "./types";
 
-const projectsCol = collection(db, "projects");
-
-function mapProject(
-  snap: QueryDocumentSnapshot<DocumentData>
-): Project {
-  const data = snap.data();
-  return {
-    id: snap.id,
-    name: data.name ?? "",
-    description: data.description ?? "",
-    budget: typeof data.budget === "number" ? data.budget : 0,
-    currency: data.currency ?? "USD",
-    ownerId: data.ownerId ?? "",
-    shareKey: data.shareKey ?? "",
-    spent: typeof data.spent === "number" ? data.spent : 0,
-    createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
-  };
-}
-
-/** Creates a project owned by `ownerId` and assigns it a fresh share key. */
 export async function createProject(
-  ownerId: string,
+  _ownerId: string,
   input: ProjectInput
 ): Promise<string> {
-  const ref = await addDoc(projectsCol, {
-    ...input,
-    ownerId,
-    shareKey: generateShareKey(),
-    spent: 0,
-    createdAt: Date.now(),
+  const res = await apiJson<{ id: string }>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
-  return ref.id;
+  return res.id;
 }
 
-export async function updateProject(
-  id: string,
-  input: ProjectInput
-): Promise<void> {
-  await updateDoc(doc(db, "projects", id), { ...input });
+export async function updateProject(id: string, input: ProjectInput): Promise<void> {
+  await apiJson(`/api/projects/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function regenerateShareKey(id: string): Promise<string> {
-  const shareKey = generateShareKey();
-  await updateDoc(doc(db, "projects", id), { shareKey });
-  return shareKey;
+  const res = await apiJson<{ shareKey: string }>(`/api/projects/${id}/sharekey`, {
+    method: "POST",
+  });
+  return res.shareKey;
 }
 
-/** Deletes a project and all of its entries in a single batch. */
 export async function deleteProject(id: string): Promise<void> {
-  const entriesSnap = await getDocs(collection(db, "projects", id, "entries"));
-  const batch = writeBatch(db);
-  entriesSnap.forEach((entry) => batch.delete(entry.ref));
-  batch.delete(doc(db, "projects", id));
-  await batch.commit();
+  await apiJson(`/api/projects/${id}`, { method: "DELETE" });
 }
 
-/** Realtime subscription to every project owned by `ownerId` (newest first). */
+export async function getProject(id: string): Promise<Project | null> {
+  const res = await apiJson<{ project: Project | null }>(`/api/projects/${id}`);
+  return res.project;
+}
+
+export async function getProjectByKey(shareKey: string): Promise<Project | null> {
+  const res = await fetch(`/api/projects/key/${encodeURIComponent(shareKey)}`);
+  if (!res.ok) return null;
+  const data = await res.json() as { project: Project | null };
+  return data.project;
+}
+
+/** Polls the server every 3 s and calls onChange with fresh project list. */
 export function subscribeProjects(
   ownerId: string,
   onChange: (projects: Project[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const q = query(projectsCol, where("ownerId", "==", ownerId));
-  return onSnapshot(
-    q,
-    (snap) => {
-      const projects = snap.docs
-        .map(mapProject)
-        .sort((a, b) => b.createdAt - a.createdAt);
-      onChange(projects);
-    },
-    (err) => onError?.(err)
-  );
+  let active = true;
+
+  async function poll() {
+    try {
+      const res = await apiFetch(`/api/projects?ownerId=${encodeURIComponent(ownerId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { projects: Project[] };
+      if (active) onChange(data.projects);
+    } catch (err) {
+      if (active) onError?.(err as Error);
+    }
+  }
+
+  poll();
+  const timer = setInterval(poll, 3000);
+  return () => { active = false; clearInterval(timer); };
 }
 
-export async function getProject(id: string): Promise<Project | null> {
-  const snap = await getDoc(doc(db, "projects", id));
-  return snap.exists()
-    ? mapProject(snap as QueryDocumentSnapshot<DocumentData>)
-    : null;
-}
-
-/** Realtime subscription to a single project by id. */
+/** Polls a single project by id every 3 s. */
 export function subscribeProject(
   id: string,
   onChange: (project: Project | null) => void,
   onError?: (error: Error) => void
 ): () => void {
-  return onSnapshot(
-    doc(db, "projects", id),
-    (snap) =>
-      onChange(
-        snap.exists()
-          ? mapProject(snap as QueryDocumentSnapshot<DocumentData>)
-          : null
-      ),
-    (err) => onError?.(err)
-  );
+  let active = true;
+
+  async function poll() {
+    try {
+      const res = await apiFetch(`/api/projects/${id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { project: Project | null };
+      if (active) onChange(data.project);
+    } catch (err) {
+      if (active) onError?.(err as Error);
+    }
+  }
+
+  poll();
+  const timer = setInterval(poll, 3000);
+  return () => { active = false; clearInterval(timer); };
 }
 
-/** Realtime subscription to a single project, looked up by its share key. */
+/** Polls a project by share key every 3 s. No auth required. */
 export function subscribeProjectByKey(
   shareKey: string,
   onChange: (project: Project | null) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const q = query(projectsCol, where("shareKey", "==", shareKey), limit(1));
-  return onSnapshot(
-    q,
-    (snap) => onChange(snap.empty ? null : mapProject(snap.docs[0])),
-    (err) => onError?.(err)
-  );
-}
+  let active = true;
 
-export async function getProjectByKey(
-  shareKey: string
-): Promise<Project | null> {
-  const q = query(projectsCol, where("shareKey", "==", shareKey), limit(1));
-  const snap = await getDocs(q);
-  return snap.empty ? null : mapProject(snap.docs[0]);
+  async function poll() {
+    try {
+      const res = await fetch(`/api/projects/key/${encodeURIComponent(shareKey)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { project: Project | null };
+      if (active) onChange(data.project);
+    } catch (err) {
+      if (active) onError?.(err as Error);
+    }
+  }
+
+  poll();
+  const timer = setInterval(poll, 3000);
+  return () => { active = false; clearInterval(timer); };
 }

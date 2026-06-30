@@ -44,7 +44,7 @@ export function SiteFooter() {
         </div>
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-stone-500 sm:flex-row">
           <p>© {new Date().getFullYear()} Tracko. Built for tidy budgets.</p>
-          <p>Powered by Next.js + Firebase</p>
+          <p>Powered by Next.js + AWS</p>
         </div>
       </div>
     </footer>

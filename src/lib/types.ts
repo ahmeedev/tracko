@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   description: string;
+  /** Denormalized running total of all budget entry amounts (kept via atomic increments). */
   budget: number;
   currency: string;
   ownerId: string;
@@ -12,11 +13,10 @@ export interface Project {
   createdAt: number;
 }
 
-/** Project data captured from a form, before it is persisted. */
+/** Project data captured from a form, before it is persisted. Budget is added later via BudgetEntry records. */
 export type ProjectInput = {
   name: string;
   description: string;
-  budget: number;
   currency: string;
 };
 
@@ -35,7 +35,7 @@ export interface Entry {
   userId?: string;
   userName?: string;
   userColor?: string;
-  /** Optional file attachment stored in Firebase Storage. */
+  /** Optional file attachment stored in S3 (value is the S3 object key). */
   attachmentUrl?: string;
   attachmentName?: string;
 }
@@ -74,7 +74,7 @@ export interface BudgetEntry {
   amount: number;
   note: string;
   date: string;
-  /** Optional file attachment stored in Firebase Storage. */
+  /** Optional file attachment stored in S3 (value is the S3 object key). */
   attachmentUrl?: string;
   attachmentName?: string;
   createdAt: number;

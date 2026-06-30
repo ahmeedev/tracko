@@ -11,6 +11,7 @@ import {
   computeUserBudgets,
 } from "@/lib/budget";
 import { formatCurrency, formatDate, currencySymbol } from "@/lib/format";
+import { attachmentHref } from "@/lib/storage";
 import type { BudgetEntry, BudgetEntryInput, Project, ProjectMember, UserIdentity } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -35,15 +36,19 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
 
   const symbol = currencySymbol(project.currency);
 
+  const accessOpts = source === "user" ? { shareKey: project.shareKey } : undefined;
+
   useEffect(() => {
     const unsubEntries = subscribeBudgetEntries(
       project.id,
       (next) => { setBudgetEntries(next); setLoading(false); },
-      () => setLoading(false)
+      () => setLoading(false),
+      accessOpts
     );
-    const unsubMembers = subscribeMembers(project.id, setMembers);
+    const unsubMembers = subscribeMembers(project.id, setMembers, undefined, accessOpts);
     return () => { unsubEntries(); unsubMembers(); };
-  }, [project.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, source]);
 
   const userBudgets = useMemo(
     () => computeUserBudgets(budgetEntries),
@@ -58,14 +63,14 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
 
   async function handleSave(input: BudgetEntryInput) {
     if (editing) {
-      await updateBudgetEntry(project.id, editing.id, input);
+      await updateBudgetEntry(project.id, editing.id, input, editing.amount, accessOpts);
     } else {
-      await addBudgetEntry(project.id, identity, source, input);
+      await addBudgetEntry(project.id, identity, source, input, accessOpts);
     }
   }
 
   async function handleDelete() {
-    if (deleting) await deleteBudgetEntry(project.id, deleting.id);
+    if (deleting) await deleteBudgetEntry(project.id, deleting.id, deleting.amount, accessOpts);
   }
 
   function openAdd() {
@@ -214,6 +219,7 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
         onSave={handleSave}
         projectId={project.id}
         currencySymbol={symbol}
+        shareKey={accessOpts?.shareKey}
         entry={editing}
       />
       <ConfirmDialog
@@ -263,7 +269,7 @@ function BudgetEntryRow({
           <span className="text-xs text-muted">{formatDate(entry.date)}</span>
           {entry.attachmentUrl && (
             <a
-              href={entry.attachmentUrl}
+              href={attachmentHref(entry.attachmentUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"

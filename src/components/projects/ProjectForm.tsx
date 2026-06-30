@@ -18,7 +18,6 @@ interface ProjectFormProps {
 export function ProjectForm({ open, onClose, onSave, project }: ProjectFormProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [budget, setBudget] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -28,17 +27,13 @@ export function ProjectForm({ open, onClose, onSave, project }: ProjectFormProps
     if (!open) return;
     setName(project?.name ?? "");
     setDescription(project?.description ?? "");
-    setBudget(project ? String(project.budget) : "");
     setCurrency(project?.currency ?? "USD");
     setError("");
   }, [open, project]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const budgetValue = Number(budget);
     if (!name.trim()) return setError("Give your project a name.");
-    if (Number.isNaN(budgetValue) || budgetValue < 0)
-      return setError("Budget must be a number of 0 or more.");
 
     setError("");
     setSaving(true);
@@ -46,7 +41,6 @@ export function ProjectForm({ open, onClose, onSave, project }: ProjectFormProps
       await onSave({
         name: name.trim(),
         description: description.trim(),
-        budget: budgetValue,
         currency,
       });
       onClose();
@@ -64,8 +58,8 @@ export function ProjectForm({ open, onClose, onSave, project }: ProjectFormProps
       title={project ? "Edit project" : "New project"}
       description={
         project
-          ? "Update the project details and budget."
-          : "Create a project and Tracko will generate a share key for it."
+          ? "Update the project details."
+          : "Create a project and Tracko will generate a share key for it. Budget is added afterwards from the Budget tab."
       }
     >
       <form id="project-form" onSubmit={handleSubmit} className="space-y-4">
@@ -89,35 +83,19 @@ export function ProjectForm({ open, onClose, onSave, project }: ProjectFormProps
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="p-budget">Budget</Label>
-            <Input
-              id="p-budget"
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="p-currency">Currency</Label>
-            <Select
-              id="p-currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
-          </div>
+        <div>
+          <Label htmlFor="p-currency">Currency</Label>
+          <Select
+            id="p-currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
         </div>
         <FieldError>{error}</FieldError>
         <div className="flex items-center justify-end gap-3 pt-2">

@@ -15,6 +15,7 @@ interface BudgetEntryFormProps {
   onSave: (input: BudgetEntryInput) => Promise<void>;
   projectId: string;
   currencySymbol: string;
+  shareKey?: string;
   entry?: BudgetEntry | null;
 }
 
@@ -24,6 +25,7 @@ export function BudgetEntryForm({
   onSave,
   projectId,
   currencySymbol,
+  shareKey,
   entry,
 }: BudgetEntryFormProps) {
   const [amount, setAmount] = useState("");
@@ -60,7 +62,7 @@ export function BudgetEntryForm({
       let attachmentName = existingName;
 
       if (file) {
-        const result = await uploadAttachment(projectId, "budgetEntries", file);
+        const result = await uploadAttachment(projectId, "budgetEntries", file, shareKey);
         attachmentUrl = result.url;
         attachmentName = result.name;
       } else if (!existingUrl) {

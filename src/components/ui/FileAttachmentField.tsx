@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Paperclip, X, FileText } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { attachmentHref } from "@/lib/storage";
 
 interface FileAttachmentFieldProps {
   value: File | null;
@@ -32,7 +33,7 @@ export function FileAttachmentField({
       <div className="flex items-center gap-2 rounded-xl border border-line bg-stone-50 px-3 py-2.5">
         <FileText className="size-4 shrink-0 text-brand-500" />
         <a
-          href={existingUrl}
+          href={attachmentHref(existingUrl)}
           target="_blank"
           rel="noopener noreferrer"
           className="min-w-0 flex-1 truncate text-sm font-medium text-brand-700 hover:underline"

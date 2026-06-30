@@ -1,26 +1,35 @@
-/** Maps Firebase Auth error codes to friendly, human messages. */
+/** Maps Cognito error names/codes to friendly messages. */
 export function authErrorMessage(error: unknown): string {
-  const code =
-    typeof error === "object" && error !== null && "code" in error
-      ? String((error as { code: unknown }).code)
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String((error as { name: unknown }).name)
       : "";
 
-  switch (code) {
-    case "auth/invalid-email":
-      return "That email address doesn't look right.";
-    case "auth/user-disabled":
-      return "This account has been disabled.";
-    case "auth/user-not-found":
-    case "auth/wrong-password":
-    case "auth/invalid-credential":
+  const message =
+    typeof error === "object" && error !== null && "message" in error
+      ? String((error as { message: unknown }).message).toLowerCase()
+      : "";
+
+  switch (name) {
+    case "NotAuthorizedException":
       return "Incorrect email or password.";
-    case "auth/email-already-in-use":
-      return "An account already exists with that email.";
-    case "auth/weak-password":
-      return "Password should be at least 6 characters.";
-    case "auth/too-many-requests":
+    case "UserNotFoundException":
+      return "Incorrect email or password.";
+    case "UserNotConfirmedException":
+      return "This account has not been confirmed yet.";
+    case "PasswordResetRequiredException":
+      return "A password reset is required for this account.";
+    case "TooManyRequestsException":
+    case "LimitExceededException":
       return "Too many attempts. Please try again in a moment.";
-    case "auth/network-request-failed":
+    case "UsernameExistsException":
+      return "An account already exists with that email.";
+    case "InvalidPasswordException":
+      return "Password must be at least 8 characters with uppercase, lowercase, numbers, and symbols.";
+    case "InvalidParameterException":
+      if (message.includes("email")) return "That email address doesn't look right.";
+      return "Invalid input. Please check your details.";
+    case "NetworkError":
       return "Network error. Check your connection and try again.";
     default:
       return "Something went wrong. Please try again.";

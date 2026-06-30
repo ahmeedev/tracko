@@ -27,6 +27,7 @@ interface EntryFormProps {
   onSave: (input: EntryInput) => Promise<void>;
   currencySymbol: string;
   projectId: string;
+  shareKey?: string;
   /** Provide to edit an existing entry; omit to add a new one. */
   entry?: Entry | null;
 }
@@ -37,6 +38,7 @@ export function EntryForm({
   onSave,
   currencySymbol,
   projectId,
+  shareKey,
   entry,
 }: EntryFormProps) {
   const [amount, setAmount] = useState("");
@@ -76,7 +78,7 @@ export function EntryForm({
       let attachmentName = existingName;
 
       if (file) {
-        const result = await uploadAttachment(projectId, "entries", file);
+        const result = await uploadAttachment(projectId, "entries", file, shareKey);
         attachmentUrl = result.url;
         attachmentName = result.name;
       } else if (!existingUrl) {
