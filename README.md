@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tracko
 
-## Getting Started
+Project-wise expense and budget tracking. **Admins** create and manage projects,
+set budgets, and share each project with a unique key. **Team members** open a
+project with that key — no account needed — and log expenses against the budget.
 
-First, run the development server:
+Built with **Next.js (App Router) + TypeScript + Tailwind CSS v4 + Firebase
+(Auth + Firestore)**, in a clean orange theme.
+
+---
+
+## Features
+
+- **Admin dashboard** — create, edit and delete projects; set budget & currency;
+  see total budget vs. spend at a glance. Protected by Firebase email/password.
+- **Unique share keys** — every project gets a key like `TRK-9K4M-PQ7Z`. Copy the
+  key or a one-click join link; regenerate to revoke access.
+- **Team view** — key-holders open a project and add/edit/delete expense entries
+  (amount, category, date, note). No sign-up.
+- **Live budgets** — a denormalized `spent` total (kept via atomic Firestore
+  increments) drives real-time budget bars, category breakdowns and over-budget
+  warnings across both views.
+
+## Roles & routes
+
+| Route                  | Who         | Purpose                                  |
+| ---------------------- | ----------- | ---------------------------------------- |
+| `/`                    | Everyone    | Marketing landing page                   |
+| `/admin`               | Admin       | Sign in (email/password)                 |
+| `/admin/signup`        | Admin       | Create an admin account                  |
+| `/admin/dashboard`     | Admin       | Manage all projects                      |
+| `/admin/projects/[id]` | Admin       | One project: entries, budget, share key  |
+| `/join`                | Team member | Enter a share key (`?key=` is prefilled) |
+| `/p/[key]`             | Team member | Shared project — manage expenses         |
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in your Firebase web config
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` is already populated for the `tracko-30ee9` Firebase project.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Firebase setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. In the [Firebase console](https://console.firebase.google.com/), open the
+   **tracko-30ee9** project (or your own).
+2. **Authentication → Sign-in method →** enable **Email/Password**.
+3. **Firestore Database →** create a database (production mode is fine; the rules
+   below control access).
+4. Deploy the security rules:
+   ```bash
+   npx firebase login
+   npx firebase deploy --only firestore:rules
+   ```
 
-## Learn More
+Create your first admin from `/admin/signup`, then start adding projects.
 
-To learn more about Next.js, take a look at the following resources:
+## Data model (Firestore)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+projects/{projectId}
+  name, description, budget, currency
+  ownerId        // admin uid
+  shareKey       // e.g. TRK-9K4M-PQ7Z
+  spent          // denormalized running total
+  createdAt
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+projects/{projectId}/entries/{entryId}
+  amount, category, date (yyyy-mm-dd), note
+  source         // "admin" | "user"
+  createdAt
+```
 
-## Deploy on Vercel
+No composite indexes are required — lists are sorted client-side.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Security note
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Team members are **unauthenticated**, so `projects` documents are world-readable
+(the client resolves a key with `where('shareKey','==', key)`, and Firestore
+rules can't restrict reads to "only if you know the key"). Entry writes are open
+for the same reason; project documents otherwise only accept owner edits, plus a
+narrow rule that lets key-holders update only the `spent` total.
+
+For a hardened production deployment, resolve keys through a **Cloud Function**
+(so the collection isn't publicly listable) and/or require **anonymous auth** +
+a membership record. See `firestore.rules` for details.
+
+## Tech
+
+- Next.js 16 (App Router, `src/` dir)
+- React 19, TypeScript
+- Tailwind CSS v4 (CSS-based `@theme`), Plus Jakarta Sans
+- Firebase Auth + Firestore
+- lucide-react icons, nanoid for keys

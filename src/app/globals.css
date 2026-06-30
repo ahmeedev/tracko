@@ -1,26 +1,111 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ */
+/*  Tracko design system — clean, modern, orange.                      */
+/*  Mirrors the calm card-based aesthetic of the reference theme.      */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Brand — warm vibrant orange */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
+
+  /* Neutrals — warm-tinted grays */
+  --color-ink: #1c1917;
+  --color-ink-soft: #44403c;
+  --color-muted: #78716c;
+  --color-line: #ece9e6;
+  --color-surface: #ffffff;
+  --color-canvas: #faf8f6;
+
+  /* Typography */
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  /* Soft, diffuse shadows like the reference cards */
+  --shadow-soft: 0 1px 2px rgba(28, 25, 23, 0.04),
+    0 8px 24px -12px rgba(28, 25, 23, 0.12);
+  --shadow-card: 0 1px 3px rgba(28, 25, 23, 0.05),
+    0 12px 32px -16px rgba(28, 25, 23, 0.16);
+  --shadow-brand: 0 8px 24px -8px rgba(234, 88, 12, 0.45);
+
+  /* Rounding */
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--color-canvas);
+  --foreground: var(--color-ink);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  border-color: var(--color-line);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings inherit the geometric sans and a tight, confident tracking */
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* Utility: gradient text used for accent words in headings */
+@utility text-gradient {
+  background: linear-gradient(100deg, var(--color-brand-500), var(--color-brand-700));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Reusable surface card */
+@utility card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-soft);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-brand-200);
+  border-radius: 9999px;
+  border: 2px solid var(--color-canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-300);
 }
