@@ -1,0 +1,22 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        # Amplify reserves AWS_* vars — inject server config into Next.js SSR runtime.
+        - env | grep -e DYNAMODB_TABLE >> .env.production || true
+        - env | grep -e S3_BUCKET_NAME >> .env.production || true
+        - env | grep -e COGNITO_USER_POOL_ID >> .env.production || true
+        - env | grep -e NEXT_PUBLIC_ >> .env.production || true
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
