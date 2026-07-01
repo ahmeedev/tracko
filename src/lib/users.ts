@@ -37,10 +37,17 @@ export async function deleteUser(uid: string): Promise<void> {
   await apiJson(`/api/users/${uid}`, { method: "DELETE" });
 }
 
-export function generatePassword(): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#";
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("");
+/** Matches AWS Cognito default password policy requirements. */
+export const COGNITO_PASSWORD_HINT =
+  "At least 8 characters with uppercase, lowercase, numbers, and symbols.";
+
+export function getCognitoPasswordError(password: string): string | null {
+  const issues: string[] = [];
+  if (password.length < 8) issues.push("at least 8 characters");
+  if (!/[a-z]/.test(password)) issues.push("a lowercase letter");
+  if (!/[A-Z]/.test(password)) issues.push("an uppercase letter");
+  if (!/[0-9]/.test(password)) issues.push("a number");
+  if (!/[^A-Za-z0-9]/.test(password)) issues.push("a symbol");
+  if (issues.length === 0) return null;
+  return `Password must include ${issues.join(", ")}.`;
 }

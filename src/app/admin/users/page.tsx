@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Plus, Trash2, UserRound, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Plus, Trash2, UserRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { subscribeProjects } from "@/lib/projects";
 import {
   assignProject,
+  COGNITO_PASSWORD_HINT,
   createUser,
   deleteUser,
-  generatePassword,
+  getCognitoPasswordError,
   getUsers,
   unassignProject,
 } from "@/lib/users";
@@ -224,18 +225,35 @@ function CreateUserModal({
   onCreate: (email: string, password: string) => Promise<void>;
 }) {
   const [email, setEmail] = useState("");
-  const [password] = useState(() => generatePassword());
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const passwordError = getCognitoPasswordError(password);
+  const showPasswordError =
+    passwordTouched && password.length > 0 ? passwordError ?? undefined : undefined;
+
+  useEffect(() => {
+    if (open) return;
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setCopied(false);
+    setPasswordTouched(false);
+    setError("");
+  }, [open]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setPasswordTouched(true);
     setError("");
+    if (passwordError) return;
     setSubmitting(true);
     try {
       await onCreate(email, password);
-      setEmail("");
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -244,6 +262,7 @@ function CreateUserModal({
   }
 
   function copyPassword() {
+    if (!password) return;
     navigator.clipboard.writeText(password);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -260,7 +279,12 @@ function CreateUserModal({
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button form="create-user-form" type="submit" loading={submitting}>
+          <Button
+            form="create-user-form"
+            type="submit"
+            loading={submitting}
+            disabled={!password || !!passwordError}
+          >
             Create Account
           </Button>
         </>
@@ -280,23 +304,41 @@ function CreateUserModal({
           />
         </div>
         <div>
-          <Label>Generated Password</Label>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-xl border border-line bg-stone-50 px-4 py-2.5 font-mono text-sm font-semibold tracking-wider text-ink">
-              {password}
-            </code>
-            <button
-              type="button"
-              onClick={copyPassword}
-              className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition-colors hover:bg-brand-50 hover:text-brand-700"
-              aria-label="Copy password"
-            >
-              {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-            </button>
+          <Label htmlFor="new-password">Password</Label>
+          <div className="relative">
+            <Input
+              id="new-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              placeholder="Enter a secure password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onBlur={() => setPasswordTouched(true)}
+              className="pr-19 font-mono tracking-wide"
+              required
+            />
+            <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="grid size-9 place-items-center rounded-lg text-muted transition-colors hover:bg-stone-100 hover:text-ink"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={copyPassword}
+                disabled={!password}
+                className="grid size-9 place-items-center rounded-lg text-muted transition-colors hover:bg-brand-50 hover:text-brand-700 disabled:opacity-40"
+                aria-label="Copy password"
+              >
+                {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
+              </button>
+            </div>
           </div>
-          <p className="mt-1.5 text-xs text-amber-700">
-            Copy this password now — it won't be shown again.
-          </p>
+          <p className="mt-1.5 text-xs text-muted">{COGNITO_PASSWORD_HINT}</p>
+          <FieldError>{showPasswordError}</FieldError>
         </div>
         <FieldError>{error}</FieldError>
       </form>
