@@ -42,74 +42,9 @@ export async function getProjectByKey(shareKey: string): Promise<Project | null>
   return data.project;
 }
 
-/** Polls the server every 3 s and calls onChange with fresh project list. */
-export function subscribeProjects(
-  ownerId: string,
-  onChange: (projects: Project[]) => void,
-  onError?: (error: Error) => void
-): () => void {
-  let active = true;
-
-  async function poll() {
-    try {
-      const res = await apiFetch(`/api/projects?ownerId=${encodeURIComponent(ownerId)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { projects: Project[] };
-      if (active) onChange(data.projects);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
-}
-
-/** Polls a single project by id every 3 s. */
-export function subscribeProject(
-  id: string,
-  onChange: (project: Project | null) => void,
-  onError?: (error: Error) => void
-): () => void {
-  let active = true;
-
-  async function poll() {
-    try {
-      const res = await apiFetch(`/api/projects/${id}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { project: Project | null };
-      if (active) onChange(data.project);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
-}
-
-/** Polls a project by share key every 3 s. No auth required. */
-export function subscribeProjectByKey(
-  shareKey: string,
-  onChange: (project: Project | null) => void,
-  onError?: (error: Error) => void
-): () => void {
-  let active = true;
-
-  async function poll() {
-    try {
-      const res = await fetch(`/api/projects/key/${encodeURIComponent(shareKey)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { project: Project | null };
-      if (active) onChange(data.project);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
+export async function getProjects(ownerId: string): Promise<Project[]> {
+  const res = await apiFetch(`/api/projects?ownerId=${encodeURIComponent(ownerId)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { projects: Project[] };
+  return data.projects;
 }

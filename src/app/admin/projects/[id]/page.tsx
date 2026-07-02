@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import {
   deleteProject,
-  subscribeProject,
+  getProject,
   updateProject,
 } from "@/lib/projects";
 import { adminIdentity } from "@/lib/identity";
@@ -50,23 +50,38 @@ function ProjectDetail() {
 
   useEffect(() => {
     if (!id) return;
-    const unsub = subscribeProject(
-      id,
-      (next) => {
-        setProject(next);
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return unsub;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const next = await getProject(id);
+        if (!cancelled) {
+          setProject(next);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, [id]);
+
+  async function reloadProject() {
+    if (!id) return;
+    setProject(await getProject(id));
+  }
 
   const identity: UserIdentity | null = user
     ? adminIdentity(user.uid, user.email ?? "admin")
     : null;
 
   async function handleSave(input: ProjectInput) {
-    if (project) await updateProject(project.id, input);
+    if (project) {
+      await updateProject(project.id, input);
+      await reloadProject();
+    }
   }
 
   async function handleDelete() {

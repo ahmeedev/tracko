@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   createProject,
   deleteProject,
-  subscribeProjects,
+  getProjects,
   updateProject,
 } from "@/lib/projects";
 import { formatCurrency } from "@/lib/format";
@@ -38,16 +38,30 @@ function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = subscribeProjects(
-      user.uid,
-      (next) => {
-        setProjects(next);
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return unsub;
+    const ownerId = user.uid;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const list = await getProjects(ownerId);
+        if (!cancelled) {
+          setProjects(list);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, [user]);
+
+  async function reloadProjects() {
+    if (!user) return;
+    const list = await getProjects(user.uid);
+    setProjects(list);
+  }
 
   const totals = useMemo(() => {
     const budget = projects.reduce((s, p) => s + p.budget, 0);
@@ -76,10 +90,14 @@ function Dashboard() {
     } else if (user) {
       await createProject(user.uid, input);
     }
+    await reloadProjects();
   }
 
   async function handleDelete() {
-    if (deleting) await deleteProject(deleting.id);
+    if (deleting) {
+      await deleteProject(deleting.id);
+      await reloadProjects();
+    }
   }
 
   return (

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, KeyRound, Pencil, Trash2 } from "lucide-react";
-import { subscribeMembers } from "@/lib/budget";
+import { getMembers } from "@/lib/budget";
 import type { Project, ProjectMember } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { BudgetBar } from "@/components/BudgetBar";
@@ -22,7 +22,19 @@ export function ProjectCard({
   const [members, setMembers] = useState<ProjectMember[]>([]);
 
   useEffect(() => {
-    return subscribeMembers(project.id, setMembers);
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const list = await getMembers(project.id);
+        if (!cancelled) setMembers(list);
+      } catch {
+        // keep existing members on error
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, [project.id]);
 
   return (
