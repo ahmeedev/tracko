@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { dynamo, cognitoAdmin, TABLES, USER_POOL_ID } from "@/lib/aws-clients";
 import { verifyAuth, unauthorized } from "@/lib/auth-server";
+import { colorFromId } from "@/lib/identity";
 import type { UserProfile } from "@/lib/types";
 
 export async function GET(req: Request) {
@@ -30,7 +31,16 @@ export async function POST(req: Request) {
   const admin = await verifyAuth(req);
   if (!admin) return unauthorized();
 
-  const { email, password } = await req.json() as { email: string; password: string };
+  const { email, password, name } = await req.json() as {
+    email: string;
+    password: string;
+    name: string;
+  };
+
+  const trimmedName = name?.trim();
+  if (!trimmedName) {
+    return Response.json({ error: "Name is required" }, { status: 400 });
+  }
 
   // Create the Cognito user without sending an invite email
   const createRes = await cognitoAdmin.send(
@@ -60,6 +70,8 @@ export async function POST(req: Request) {
   const profile: UserProfile = {
     uid: sub,
     email,
+    name: trimmedName,
+    color: colorFromId(sub),
     role: "user",
     assignedProjectIds: [],
     createdAt: Date.now(),

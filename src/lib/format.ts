@@ -1,13 +1,13 @@
 export const CURRENCIES = [
   { code: "USD", symbol: "$", label: "USD — US Dollar" },
-  { code: "EUR", symbol: "€", label: "EUR — Euro" },
-  { code: "GBP", symbol: "£", label: "GBP — British Pound" },
   { code: "PKR", symbol: "₨", label: "PKR — Pakistani Rupee" },
-  { code: "INR", symbol: "₹", label: "INR — Indian Rupee" },
-  { code: "AED", symbol: "د.إ", label: "AED — UAE Dirham" },
-  { code: "CAD", symbol: "$", label: "CAD — Canadian Dollar" },
-  { code: "AUD", symbol: "$", label: "AUD — Australian Dollar" },
 ] as const;
+
+export type CurrencyCode = (typeof CURRENCIES)[number]["code"];
+
+export function isAllowedCurrency(code: string): code is CurrencyCode {
+  return CURRENCIES.some((c) => c.code === code);
+}
 
 export function currencySymbol(code: string): string {
   return CURRENCIES.find((c) => c.code === code)?.symbol ?? code;

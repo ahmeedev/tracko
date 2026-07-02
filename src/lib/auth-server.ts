@@ -28,3 +28,15 @@ export async function verifyAuth(req: Request): Promise<AuthUser | null> {
 export function unauthorized() {
   return Response.json({ error: "Unauthorized" }, { status: 401 });
 }
+
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? "";
+
+export function isAdminEmail(email: string): boolean {
+  return !!(ADMIN_EMAIL && email === ADMIN_EMAIL);
+}
+
+export async function verifyAdmin(req: Request): Promise<AuthUser | null> {
+  const user = await verifyAuth(req);
+  if (!user || !isAdminEmail(user.email)) return null;
+  return user;
+}

@@ -1,28 +1,16 @@
 import { UpdateCommand, TransactWriteCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamo, TABLES } from "@/lib/aws-clients";
-import { verifyAuth } from "@/lib/auth-server";
+import { canModifyEntry, resolveCallerUserId } from "@/lib/entry-access";
+import type { Entry } from "@/lib/types";
 
 type Ctx = { params: Promise<{ projectId: string; entryId: string }> };
 
-async function validateAccess(req: Request, projectId: string): Promise<boolean> {
-  const user = await verifyAuth(req);
-  if (user) return true;
-  const url = new URL(req.url);
-  const shareKey = url.searchParams.get("shareKey");
-  if (!shareKey) return false;
-  const result = await dynamo.send(
-    new GetCommand({ TableName: TABLES.projects, Key: { id: projectId } })
-  );
-  return result.Item?.shareKey === shareKey;
-}
-
 export async function PUT(req: Request, { params }: Ctx) {
   const { projectId, entryId } = await params;
-  if (!(await validateAccess(req, projectId))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const body = await req.json() as {
+    shareKey?: string;
+    userId?: string;
     amount: number;
     category: string;
     date: string;
@@ -31,6 +19,22 @@ export async function PUT(req: Request, { params }: Ctx) {
     attachmentUrl?: string;
     attachmentName?: string;
   };
+
+  const callerId = await resolveCallerUserId(req, projectId, body.shareKey, body.userId);
+  if (!callerId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const existing = await dynamo.send(
+    new GetCommand({ TableName: TABLES.entries, Key: { projectId, id: entryId } })
+  );
+  const entry = existing.Item as Entry | undefined;
+  if (!entry) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!(await canModifyEntry(req, entry.userId, callerId))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const delta = body.amount - body.previousAmount;
 
@@ -91,11 +95,26 @@ export async function PUT(req: Request, { params }: Ctx) {
 
 export async function DELETE(req: Request, { params }: Ctx) {
   const { projectId, entryId } = await params;
-  if (!(await validateAccess(req, projectId))) {
+  const url = new URL(req.url);
+  const shareKey = url.searchParams.get("shareKey") ?? undefined;
+  const userId = url.searchParams.get("userId") ?? undefined;
+
+  const callerId = await resolveCallerUserId(req, projectId, shareKey, userId);
+  if (!callerId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const url = new URL(req.url);
+  const existing = await dynamo.send(
+    new GetCommand({ TableName: TABLES.entries, Key: { projectId, id: entryId } })
+  );
+  const entry = existing.Item as Entry | undefined;
+  if (!entry) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!(await canModifyEntry(req, entry.userId, callerId))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const amount = Number(url.searchParams.get("amount") ?? "0");
 
   await dynamo.send(

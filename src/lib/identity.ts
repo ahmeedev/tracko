@@ -54,10 +54,44 @@ export function createIdentity(projectId: string, name: string): UserIdentity {
   return identity;
 }
 
+export function colorFromId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  return MEMBER_COLORS[Math.abs(hash) % MEMBER_COLORS.length];
+}
+
+const HEX_COLOR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+
+export function isValidHexColor(value: string): boolean {
+  return HEX_COLOR.test(value.trim());
+}
+
+/** Normalises shorthand hex (#RGB) to #RRGGBB. */
+export function normalizeHexColor(value: string): string {
+  const hex = value.trim();
+  if (!HEX_COLOR.test(hex)) return hex;
+  if (hex.length === 4) {
+    const r = hex[1];
+    const g = hex[2];
+    const b = hex[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  return hex.toUpperCase();
+}
+
+/** Builds a stable identity from an authenticated user's account profile. */
+export function accountIdentity(uid: string, name: string, color?: string): UserIdentity {
+  const resolved =
+    color && isValidHexColor(color) ? normalizeHexColor(color) : colorFromId(uid);
+  return { id: uid, name: name.trim(), color: resolved };
+}
+
 /** Builds a stable admin identity from the authenticated user's info. */
-export function adminIdentity(uid: string, email: string): UserIdentity {
-  const name = email.split("@")[0] ?? "Admin";
-  return { id: uid, name, color: "#6366F1" };
+export function adminIdentity(uid: string, email: string, name?: string): UserIdentity {
+  const displayName = name?.trim() || email.split("@")[0] || "Admin";
+  return { id: uid, name: displayName, color: "#6366F1" };
 }
 
 export { MEMBER_COLORS };

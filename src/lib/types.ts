@@ -52,6 +52,9 @@ export type EntryInput = {
 export interface UserProfile {
   uid: string;
   email: string;
+  name: string;
+  /** Avatar colour assigned by an admin (hex, e.g. #3B82F6). */
+  color?: string;
   role: "admin" | "user";
   assignedProjectIds: string[];
   createdAt: number;

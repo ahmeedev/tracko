@@ -1,6 +1,7 @@
 import { GetCommand, UpdateCommand, DeleteCommand, QueryCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamo, TABLES } from "@/lib/aws-clients";
 import { verifyAuth, unauthorized } from "@/lib/auth-server";
+import { isAllowedCurrency } from "@/lib/format";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,6 +24,9 @@ export async function PUT(req: Request, { params }: Ctx) {
 
   const { id } = await params;
   const body = await req.json() as { name: string; description: string; currency: string };
+  if (!isAllowedCurrency(body.currency)) {
+    return Response.json({ error: "Currency must be USD or PKR" }, { status: 400 });
+  }
 
   await dynamo.send(
     new UpdateCommand({

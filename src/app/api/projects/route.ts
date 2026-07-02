@@ -2,6 +2,7 @@ import { QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamo, TABLES } from "@/lib/aws-clients";
 import { verifyAuth, unauthorized } from "@/lib/auth-server";
 import { generateShareKey } from "@/lib/keys";
+import { isAllowedCurrency } from "@/lib/format";
 import type { Project } from "@/lib/types";
 
 export async function GET(req: Request) {
@@ -31,6 +32,10 @@ export async function POST(req: Request) {
   if (!user) return unauthorized();
 
   const body = await req.json() as { name: string; description: string; currency: string };
+  if (!isAllowedCurrency(body.currency)) {
+    return Response.json({ error: "Currency must be USD or PKR" }, { status: 400 });
+  }
+
   const id = crypto.randomUUID();
 
   const project: Project = {

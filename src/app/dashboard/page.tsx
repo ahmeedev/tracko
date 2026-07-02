@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderKanban, ArrowUpRight, KeyRound, LogOut } from "lucide-react";
+import { FolderKanban, ArrowUpRight, KeyRound, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getUserProfile } from "@/lib/users";
 import { getProject } from "@/lib/projects";
@@ -19,6 +19,7 @@ export default function UserDashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -36,6 +37,7 @@ export default function UserDashboardPage() {
           setDataLoading(false);
           return;
         }
+        setDisplayName(profile.name ?? "");
         const fetched = await Promise.all(
           profile.assignedProjectIds.map((id) => getProject(id))
         );
@@ -65,9 +67,13 @@ export default function UserDashboardPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Logo />
           <div className="flex items-center gap-3">
-            <span className="hidden max-w-[200px] truncate text-sm font-medium text-muted md:inline">
-              {user.email}
-            </span>
+            <Link
+              href="/settings"
+              className="hidden items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 sm:inline-flex"
+            >
+              <Settings className="size-4" />
+              {displayName || user.email}
+            </Link>
             <button
               onClick={handleSignOut}
               className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"

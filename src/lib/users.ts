@@ -1,10 +1,10 @@
 import { apiJson } from "./api-client";
 import type { UserProfile } from "./types";
 
-export async function createUser(email: string, password: string): Promise<string> {
+export async function createUser(email: string, password: string, name: string): Promise<string> {
   const res = await apiJson<{ uid: string }>("/api/users", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, name }),
   });
   return res.uid;
 }
@@ -35,6 +35,22 @@ export async function unassignProject(uid: string, projectId: string): Promise<v
 
 export async function deleteUser(uid: string): Promise<void> {
   await apiJson(`/api/users/${uid}`, { method: "DELETE" });
+}
+
+export async function updateUserName(uid: string, name: string): Promise<UserProfile> {
+  const res = await apiJson<{ user: UserProfile }>(`/api/users/${uid}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+  return res.user;
+}
+
+export async function updateUserColor(uid: string, color: string): Promise<UserProfile> {
+  const res = await apiJson<{ user: UserProfile }>(`/api/users/${uid}`, {
+    method: "PATCH",
+    body: JSON.stringify({ color }),
+  });
+  return res.user;
 }
 
 /** Matches AWS Cognito default password policy requirements. */

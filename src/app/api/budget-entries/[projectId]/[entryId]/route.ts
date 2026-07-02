@@ -1,23 +1,15 @@
 import { UpdateCommand, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamo, TABLES } from "@/lib/aws-clients";
-import { verifyAuth } from "@/lib/auth-server";
+import { canModifyEntry, resolveCallerUserId } from "@/lib/entry-access";
+import type { BudgetEntry } from "@/lib/types";
 
 type Ctx = { params: Promise<{ projectId: string; entryId: string }> };
-
-async function validateAccess(req: Request, projectId: string, shareKey?: string): Promise<boolean> {
-  const user = await verifyAuth(req);
-  if (user) return true;
-  if (!shareKey) return false;
-  const result = await dynamo.send(
-    new GetCommand({ TableName: TABLES.projects, Key: { id: projectId } })
-  );
-  return result.Item?.shareKey === shareKey;
-}
 
 export async function PUT(req: Request, { params }: Ctx) {
   const { projectId, entryId } = await params;
   const body = await req.json() as {
     shareKey?: string;
+    userId?: string;
     amount: number;
     note: string;
     date: string;
@@ -26,8 +18,20 @@ export async function PUT(req: Request, { params }: Ctx) {
     attachmentName?: string;
   };
 
-  if (!(await validateAccess(req, projectId, body.shareKey))) {
+  const callerId = await resolveCallerUserId(req, projectId, body.shareKey, body.userId);
+  if (!callerId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const existing = await dynamo.send(
+    new GetCommand({ TableName: TABLES.budgetEntries, Key: { projectId, id: entryId } })
+  );
+  const entry = existing.Item as BudgetEntry | undefined;
+  if (!entry) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!(await canModifyEntry(req, entry.userId, callerId))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const delta = body.amount - body.previousAmount;
@@ -72,10 +76,23 @@ export async function DELETE(req: Request, { params }: Ctx) {
   const { projectId, entryId } = await params;
   const url = new URL(req.url);
   const shareKey = url.searchParams.get("shareKey") ?? undefined;
+  const userId = url.searchParams.get("userId") ?? undefined;
   const amount = Number(url.searchParams.get("amount") ?? "0");
 
-  if (!(await validateAccess(req, projectId, shareKey))) {
+  const callerId = await resolveCallerUserId(req, projectId, shareKey, userId);
+  if (!callerId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const existing = await dynamo.send(
+    new GetCommand({ TableName: TABLES.budgetEntries, Key: { projectId, id: entryId } })
+  );
+  const entry = existing.Item as BudgetEntry | undefined;
+  if (!entry) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!(await canModifyEntry(req, entry.userId, callerId))) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await dynamo.send(
