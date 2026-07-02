@@ -3,12 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import {
-  subscribeBudgetEntries,
-  subscribeMembers,
+  getBudgetEntries,
   addBudgetEntry,
   updateBudgetEntry,
   deleteBudgetEntry,
-  computeUserBudgets,
 } from "@/lib/budget";
 import { formatCurrency, formatDate, currencySymbol } from "@/lib/format";
 import { attachmentHref } from "@/lib/storage";
@@ -24,11 +22,11 @@ interface BudgetSectionProps {
   project: Project;
   identity: UserIdentity;
   source: "admin" | "user";
+  onMutated?: () => void;
 }
 
-export function BudgetSection({ project, identity, source }: BudgetSectionProps) {
+export function BudgetSection({ project, identity, source, onMutated }: BudgetSectionProps) {
   const [budgetEntries, setBudgetEntries] = useState<BudgetEntry[]>([]);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEntry | null>(null);
@@ -37,40 +35,66 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
   const symbol = currencySymbol(project.currency);
 
   const accessOpts = source === "user" ? { shareKey: project.shareKey } : undefined;
+  const canEditAll = source === "admin";
 
   useEffect(() => {
-    const unsubEntries = subscribeBudgetEntries(
-      project.id,
-      (next) => { setBudgetEntries(next); setLoading(false); },
-      () => setLoading(false),
-      accessOpts
-    );
-    const unsubMembers = subscribeMembers(project.id, setMembers, undefined, accessOpts);
-    return () => { unsubEntries(); unsubMembers(); };
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const next = await getBudgetEntries(project.id, accessOpts);
+        if (!cancelled) {
+          setBudgetEntries(next);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    setLoading(true);
+    load();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, source]);
 
-  const userBudgets = useMemo(
-    () => computeUserBudgets(budgetEntries),
-    [budgetEntries]
-  );
+  async function reloadBudgetEntries() {
+    const next = await getBudgetEntries(project.id, accessOpts);
+    setBudgetEntries(next);
+  }
 
   const memberMap = useMemo(() => {
     const m = new Map<string, ProjectMember>();
-    members.forEach((mem) => m.set(mem.userId, mem));
+    for (const entry of budgetEntries) {
+      if (!m.has(entry.userId)) {
+        m.set(entry.userId, {
+          userId: entry.userId,
+          name: entry.userName,
+          color: entry.userColor,
+          source: "user",
+          joinedAt: entry.createdAt,
+        });
+      }
+    }
     return m;
-  }, [members]);
+  }, [budgetEntries]);
 
   async function handleSave(input: BudgetEntryInput) {
     if (editing) {
-      await updateBudgetEntry(project.id, editing.id, input, editing.amount, accessOpts);
+      await updateBudgetEntry(project.id, editing.id, input, editing.amount, identity.id, accessOpts);
     } else {
       await addBudgetEntry(project.id, identity, source, input, accessOpts);
     }
+    await reloadBudgetEntries();
+    onMutated?.();
   }
 
   async function handleDelete() {
-    if (deleting) await deleteBudgetEntry(project.id, deleting.id, deleting.amount, accessOpts);
+    if (deleting) {
+      await deleteBudgetEntry(project.id, deleting.id, deleting.amount, identity.id, accessOpts);
+      await reloadBudgetEntries();
+      onMutated?.();
+    }
   }
 
   function openAdd() {
@@ -83,59 +107,6 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
 
   return (
     <div className="space-y-4">
-      {/* Per-member budget summary */}
-      {members.length > 0 && (
-        <Card>
-          <CardBody>
-            <h3 className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">
-              Member budgets
-            </h3>
-            <div className="space-y-4">
-              {members.map((member) => {
-                const budget = userBudgets.get(member.userId) ?? 0;
-                const pct = budget > 0 ? Math.min((project.spent / budget) * 100, 100) : 0;
-                const remaining = budget - project.spent;
-                return (
-                  <div key={member.userId}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <UserAvatar name={member.name} color={member.color} />
-                        <span className="text-sm font-semibold text-ink">
-                          {member.name}
-                          {member.userId === identity.id && (
-                            <span className="ml-1.5 text-xs text-muted">(you)</span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-ink">
-                          {formatCurrency(budget, project.currency)}
-                        </p>
-                        <p
-                          className={`text-xs font-medium ${
-                            remaining < 0 ? "text-red-600" : "text-muted"
-                          }`}
-                        >
-                          {remaining < 0 ? "−" : ""}{formatCurrency(Math.abs(remaining), project.currency)} left
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-100">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          pct >= 100 ? "bg-red-500" : "bg-brand-500"
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardBody>
-        </Card>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -204,6 +175,9 @@ export function BudgetSection({ project, identity, source }: BudgetSectionProps)
                       entry={entry}
                       currency={project.currency}
                       member={memberMap.get(entry.userId)}
+                      showActions={canEditAll}
+                      onEdit={canEditAll ? () => { setEditing(entry); setFormOpen(true); } : undefined}
+                      onDelete={canEditAll ? () => setDeleting(entry) : undefined}
                     />
                   ))}
                 </ul>

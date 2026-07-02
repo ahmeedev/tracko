@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Eye, EyeOff, Plus, Trash2, UserRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { subscribeProjects } from "@/lib/projects";
+import { getProjects } from "@/lib/projects";
 import {
   assignProject,
   COGNITO_PASSWORD_HINT,
@@ -12,10 +12,15 @@ import {
   getCognitoPasswordError,
   getUsers,
   unassignProject,
+  updateUserColor,
+  updateUserName,
 } from "@/lib/users";
+import { colorFromId } from "@/lib/identity";
 import { authErrorMessage } from "@/lib/authErrors";
 import type { Project, UserProfile } from "@/lib/types";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { UserColorPicker } from "@/components/UserColorPicker";
+import { UserAvatar } from "@/components/projects/MemberAvatars";
 import { Button } from "@/components/ui/Button";
 import { Card, CardBody } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
@@ -53,11 +58,24 @@ function UsersManager() {
 
   useEffect(() => {
     if (!user) return;
-    return subscribeProjects(user.uid, setProjects);
+    const ownerId = user.uid;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const list = await getProjects(ownerId);
+        if (!cancelled) setProjects(list);
+      } catch {
+        // keep existing project list on error
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, [user]);
 
-  async function handleCreateUser(email: string, password: string) {
-    await createUser(email, password);
+  async function handleCreateUser(email: string, password: string, name: string) {
+    await createUser(email, password, name);
     await reload();
     setCreateOpen(false);
   }
@@ -151,6 +169,18 @@ function UsersManager() {
             setDeleteTarget(manageUser);
             setManageUser(null);
           }}
+          onNameUpdated={(uid, name) => {
+            setUsers((prev) =>
+              prev.map((u) => (u.uid === uid ? { ...u, name } : u))
+            );
+            setManageUser((prev) => (prev?.uid === uid ? { ...prev, name } : prev));
+          }}
+          onColorUpdated={(uid, color) => {
+            setUsers((prev) =>
+              prev.map((u) => (u.uid === uid ? { ...u, color } : u))
+            );
+            setManageUser((prev) => (prev?.uid === uid ? { ...prev, color } : prev));
+          }}
         />
       )}
 
@@ -184,16 +214,22 @@ function UserCard({
   onDelete: () => void;
 }) {
   const assignedCount = user.assignedProjectIds.length;
+  const displayName = user.name || user.email;
+  const avatarColor = user.color ?? colorFromId(user.uid);
   return (
     <Card className="flex flex-col p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-ink">{user.email}</p>
-          <p className="mt-0.5 text-xs text-muted">
-            {assignedCount === 0
-              ? "No projects assigned"
-              : `${assignedCount} project${assignedCount !== 1 ? "s" : ""} assigned`}
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <UserAvatar name={displayName} color={avatarColor} size="md" />
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-ink">{displayName}</p>
+            <p className="mt-0.5 truncate text-xs text-muted">{user.email}</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {assignedCount === 0
+                ? "No projects assigned"
+                : `${assignedCount} project${assignedCount !== 1 ? "s" : ""} assigned`}
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -222,8 +258,9 @@ function CreateUserModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (email: string, password: string) => Promise<void>;
+  onCreate: (email: string, password: string, name: string) => Promise<void>;
 }) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -238,6 +275,7 @@ function CreateUserModal({
 
   useEffect(() => {
     if (open) return;
+    setName("");
     setEmail("");
     setPassword("");
     setShowPassword(false);
@@ -253,7 +291,7 @@ function CreateUserModal({
     if (passwordError) return;
     setSubmitting(true);
     try {
-      await onCreate(email, password);
+      await onCreate(email, password, name);
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
@@ -283,7 +321,7 @@ function CreateUserModal({
             form="create-user-form"
             type="submit"
             loading={submitting}
-            disabled={!password || !!passwordError}
+            disabled={!name.trim() || !password || !!passwordError}
           >
             Create Account
           </Button>
@@ -291,6 +329,18 @@ function CreateUserModal({
       }
     >
       <form id="create-user-form" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <Label htmlFor="new-name">Name</Label>
+          <Input
+            id="new-name"
+            type="text"
+            autoComplete="off"
+            placeholder="e.g. Sarah Johnson"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
         <div>
           <Label htmlFor="new-email">Email</Label>
           <Input
@@ -355,6 +405,8 @@ function ManageUserModal({
   onClose,
   onToggleProject,
   onDelete,
+  onNameUpdated,
+  onColorUpdated,
 }: {
   user: UserProfile;
   projects: Project[];
@@ -362,8 +414,51 @@ function ManageUserModal({
   onClose: () => void;
   onToggleProject: (uid: string, projectId: string, assigned: boolean) => Promise<void>;
   onDelete: () => void;
+  onNameUpdated: (uid: string, name: string) => void;
+  onColorUpdated: (uid: string, color: string) => void;
 }) {
   const [toggling, setToggling] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState(user.name ?? "");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const [savingColor, setSavingColor] = useState(false);
+  const [colorError, setColorError] = useState("");
+  const userColor = user.color ?? colorFromId(user.uid);
+
+  useEffect(() => {
+    setDisplayName(user.name ?? "");
+  }, [user.name]);
+
+  async function handleSaveName() {
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      setNameError("Name is required.");
+      return;
+    }
+    setNameError("");
+    setSavingName(true);
+    try {
+      await updateUserName(user.uid, trimmed);
+      onNameUpdated(user.uid, trimmed);
+    } catch {
+      setNameError("Could not save name. Try again.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleColorChange(color: string) {
+    setColorError("");
+    setSavingColor(true);
+    try {
+      await updateUserColor(user.uid, color);
+      onColorUpdated(user.uid, color);
+    } catch {
+      setColorError("Could not save colour. Try again.");
+    } finally {
+      setSavingColor(false);
+    }
+  }
 
   async function handleToggle(projectId: string, assigned: boolean) {
     setToggling(projectId);
@@ -375,8 +470,8 @@ function ManageUserModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={user.email}
-      description="Toggle which projects this user can access."
+      title={user.name || user.email}
+      description="Update the user's name, colour, and assign projects."
       footer={
         <>
           <Button
@@ -390,6 +485,38 @@ function ManageUserModal({
         </>
       }
     >
+      <div className="mb-5 space-y-2">
+        <Label htmlFor="manage-name">Name</Label>
+        <div className="flex gap-2">
+          <Input
+            id="manage-name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            loading={savingName}
+            onClick={handleSaveName}
+            disabled={!displayName.trim()}
+          >
+            Save
+          </Button>
+        </div>
+        <FieldError>{nameError}</FieldError>
+        <p className="text-xs text-muted">{user.email}</p>
+      </div>
+
+      <div className="mb-6">
+        <UserColorPicker
+          value={userColor}
+          previewName={displayName.trim() || user.email}
+          disabled={savingColor}
+          onChange={handleColorChange}
+        />
+        <FieldError>{colorError}</FieldError>
+      </div>
+
       {projects.length === 0 ? (
         <p className="text-sm text-muted">
           You have no projects yet. Create one from the Dashboard first.

@@ -10,7 +10,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { subscribeEntries, addEntry, updateEntry, deleteEntry } from "@/lib/entries";
+import { getEntries, addEntry, updateEntry, deleteEntry } from "@/lib/entries";
 import { currencySymbol, formatCurrency, formatDate } from "@/lib/format";
 import { attachmentHref } from "@/lib/storage";
 import type { Entry, EntryInput, Project, UserIdentity } from "@/lib/types";
@@ -25,6 +25,7 @@ import { EntryForm } from "@/components/entries/EntryForm";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { UserAvatar } from "./MemberAvatars";
 import { BudgetSection } from "./BudgetSection";
+import { MemberBudgetsCard } from "./MemberBudgetsCard";
 
 const CATEGORY_COLORS = [
   "bg-brand-500",
@@ -52,24 +53,38 @@ export function ProjectWorkspace({
   const [editing, setEditing] = useState<Entry | null>(null);
   const [deleting, setDeleting] = useState<Entry | null>(null);
   const [tab, setTab] = useState<"expenses" | "budget">("expenses");
+  const [budgetRefreshKey, setBudgetRefreshKey] = useState(0);
 
   const symbol = currencySymbol(project.currency);
 
   const accessOpts = source === "user" ? { shareKey: project.shareKey } : undefined;
+  const canEditAll = source === "admin";
 
   useEffect(() => {
-    const unsub = subscribeEntries(
-      project.id,
-      (next) => {
-        setEntries(next);
-        setLoading(false);
-      },
-      () => setLoading(false),
-      accessOpts
-    );
-    return unsub;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const next = await getEntries(project.id, accessOpts);
+        if (!cancelled) {
+          setEntries(next);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    setLoading(true);
+    load();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, source]);
+
+  async function reloadEntries() {
+    const next = await getEntries(project.id, accessOpts);
+    setEntries(next);
+  }
 
   const spent = useMemo(
     () => entries.reduce((sum, e) => sum + e.amount, 0),
@@ -100,14 +115,18 @@ export function ProjectWorkspace({
 
   async function handleSave(input: EntryInput) {
     if (editing) {
-      await updateEntry(project.id, editing.id, input, editing.amount, accessOpts);
+      await updateEntry(project.id, editing.id, input, editing.amount, identity.id, accessOpts);
     } else {
       await addEntry(project.id, input, source, identity, accessOpts);
     }
+    await reloadEntries();
   }
 
   async function handleDelete() {
-    if (deleting) await deleteEntry(project.id, deleting.id, deleting.amount, accessOpts);
+    if (deleting) {
+      await deleteEntry(project.id, deleting.id, deleting.amount, identity.id, accessOpts);
+      await reloadEntries();
+    }
   }
 
   return (
@@ -133,46 +152,57 @@ export function ProjectWorkspace({
         />
       </div>
 
-      <Card>
-        <CardBody>
-          <BudgetBar
-            spent={spent}
-            budget={project.budget}
-            currency={project.currency}
-          />
-          {categories.length > 0 && (
-            <div className="mt-6 border-t border-line pt-5">
-              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
-                By category
-              </p>
-              <div className="space-y-2.5">
-                {categories.map((cat, i) => {
-                  const pct = spent > 0 ? (cat.total / spent) * 100 : 0;
-                  return (
-                    <div key={cat.name} className="flex items-center gap-3">
-                      <span
-                        className={`size-2.5 shrink-0 rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`}
-                      />
-                      <span className="w-28 shrink-0 truncate text-sm font-semibold text-ink">
-                        {cat.name}
-                      </span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-stone-100">
-                        <div
-                          className={`h-full rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`}
-                          style={{ width: `${pct}%` }}
+      {tab === "expenses" && (
+        <Card>
+          <CardBody>
+            <BudgetBar
+              spent={spent}
+              budget={project.budget}
+              currency={project.currency}
+            />
+            {categories.length > 0 && (
+              <div className="mt-6 border-t border-line pt-5">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
+                  By category
+                </p>
+                <div className="space-y-2.5">
+                  {categories.map((cat, i) => {
+                    const pct = spent > 0 ? (cat.total / spent) * 100 : 0;
+                    return (
+                      <div key={cat.name} className="flex items-center gap-3">
+                        <span
+                          className={`size-2.5 shrink-0 rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`}
                         />
+                        <span className="w-28 shrink-0 truncate text-sm font-semibold text-ink">
+                          {cat.name}
+                        </span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-stone-100">
+                          <div
+                            className={`h-full rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="w-24 shrink-0 text-right text-sm font-bold text-ink">
+                          {formatCurrency(cat.total, project.currency)}
+                        </span>
                       </div>
-                      <span className="w-24 shrink-0 text-right text-sm font-bold text-ink">
-                        {formatCurrency(cat.total, project.currency)}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </CardBody>
-      </Card>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {tab === "budget" && (
+        <MemberBudgetsCard
+          project={project}
+          identity={identity}
+          source={source}
+          refreshKey={budgetRefreshKey}
+        />
+      )}
 
       {/* Expenses / Budget tabs */}
       <Tabs
@@ -185,7 +215,12 @@ export function ProjectWorkspace({
       />
 
       {tab === "budget" && (
-        <BudgetSection project={project} identity={identity} source={source} />
+        <BudgetSection
+          project={project}
+          identity={identity}
+          source={source}
+          onMutated={() => setBudgetRefreshKey((k) => k + 1)}
+        />
       )}
 
       {tab === "expenses" && (
@@ -260,21 +295,23 @@ export function ProjectWorkspace({
                     <span className="shrink-0 text-base font-bold text-ink">
                       {formatCurrency(entry.amount, project.currency)}
                     </span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <IconButton
-                        label="Edit entry"
-                        onClick={() => openEdit(entry)}
-                      >
-                        <Pencil className="size-4" />
-                      </IconButton>
-                      <IconButton
-                        label="Delete entry"
-                        danger
-                        onClick={() => setDeleting(entry)}
-                      >
-                        <Trash2 className="size-4" />
-                      </IconButton>
-                    </div>
+                    {entry.userId === identity.id || canEditAll ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <IconButton
+                          label="Edit entry"
+                          onClick={() => openEdit(entry)}
+                        >
+                          <Pencil className="size-4" />
+                        </IconButton>
+                        <IconButton
+                          label="Delete entry"
+                          danger
+                          onClick={() => setDeleting(entry)}
+                        >
+                          <Trash2 className="size-4" />
+                        </IconButton>
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

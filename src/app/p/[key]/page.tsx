@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { KeyRound, LogOut, SearchX } from "lucide-react";
-import { subscribeProjectByKey } from "@/lib/projects";
+import { getProjectByKey } from "@/lib/projects";
 import { normalizeShareKey } from "@/lib/keys";
-import { getStoredIdentity } from "@/lib/identity";
+import { accountIdentity, getStoredIdentity } from "@/lib/identity";
+import { getUserProfile } from "@/lib/users";
+import { useAuth } from "@/context/AuthContext";
 import type { Project, UserIdentity } from "@/lib/types";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/Button";
@@ -19,30 +21,62 @@ import { IdentitySetup } from "@/components/projects/IdentitySetup";
 export default function SharedProjectPage() {
   const params = useParams<{ key: string }>();
   const key = normalizeShareKey(decodeURIComponent(params.key ?? ""));
+  const { user, loading: authLoading } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [identity, setIdentity] = useState<UserIdentity | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
 
   useEffect(() => {
     if (!key) {
       setLoading(false);
       return;
     }
-    const unsub = subscribeProjectByKey(
-      key,
-      (next) => {
-        setProject(next);
-        setLoading(false);
-        if (next) {
-          const stored = getStoredIdentity(next.id);
-          setIdentity(stored);
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const next = await getProjectByKey(key);
+        if (!cancelled) {
+          setProject(next);
+          setLoading(false);
         }
-      },
-      () => setLoading(false)
-    );
-    return unsub;
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, [key]);
+
+  useEffect(() => {
+    if (!project || authLoading) return;
+
+    let cancelled = false;
+
+    async function resolveIdentity() {
+      if (user) {
+        const profile = await getUserProfile(user.uid);
+        if (cancelled) return;
+        const displayName =
+          profile?.name?.trim() || user.email.split("@")[0] || "User";
+        setIdentity(accountIdentity(user.uid, displayName, profile?.color));
+        setIdentityLoading(false);
+        return;
+      }
+
+      const stored = getStoredIdentity(project!.id);
+      if (!cancelled) {
+        setIdentity(stored);
+        setIdentityLoading(false);
+      }
+    }
+
+    resolveIdentity();
+    return () => { cancelled = true; };
+  }, [project, user, authLoading]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -99,7 +133,9 @@ export default function SharedProjectPage() {
             </div>
 
             <div className="mt-7">
-              {identity ? (
+              {loading || authLoading || identityLoading ? (
+                <FullPageLoader label="Opening project…" />
+              ) : identity ? (
                 <ProjectWorkspace
                   project={project}
                   source="user"

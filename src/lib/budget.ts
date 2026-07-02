@@ -5,54 +5,26 @@ interface AccessOptions {
   shareKey?: string;
 }
 
-export function subscribeBudgetEntries(
+export async function getBudgetEntries(
   projectId: string,
-  onChange: (entries: BudgetEntry[]) => void,
-  onError?: (error: Error) => void,
   options?: AccessOptions
-): () => void {
-  let active = true;
+): Promise<BudgetEntry[]> {
   const qs = options?.shareKey ? `?shareKey=${encodeURIComponent(options.shareKey)}` : "";
-
-  async function poll() {
-    try {
-      const res = await apiFetch(`/api/budget-entries/${projectId}${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { entries: BudgetEntry[] };
-      if (active) onChange(data.entries);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
+  const res = await apiFetch(`/api/budget-entries/${projectId}${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { entries: BudgetEntry[] };
+  return data.entries;
 }
 
-export function subscribeMembers(
+export async function getMembers(
   projectId: string,
-  onChange: (members: ProjectMember[]) => void,
-  onError?: (error: Error) => void,
   options?: AccessOptions
-): () => void {
-  let active = true;
+): Promise<ProjectMember[]> {
   const qs = options?.shareKey ? `?shareKey=${encodeURIComponent(options.shareKey)}` : "";
-
-  async function poll() {
-    try {
-      const res = await apiFetch(`/api/members/${projectId}${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { members: ProjectMember[] };
-      if (active) onChange(data.members);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
+  const res = await apiFetch(`/api/members/${projectId}${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { members: ProjectMember[] };
+  return data.members;
 }
 
 export async function addBudgetEntry(
@@ -74,11 +46,12 @@ export async function updateBudgetEntry(
   entryId: string,
   input: BudgetEntryInput,
   previousAmount: number,
+  userId: string,
   options?: AccessOptions
 ): Promise<void> {
   await apiJson(`/api/budget-entries/${projectId}/${entryId}`, {
     method: "PUT",
-    body: JSON.stringify({ ...input, previousAmount, shareKey: options?.shareKey }),
+    body: JSON.stringify({ ...input, previousAmount, userId, shareKey: options?.shareKey }),
   });
 }
 
@@ -86,9 +59,10 @@ export async function deleteBudgetEntry(
   projectId: string,
   entryId: string,
   amount: number,
+  userId: string,
   options?: AccessOptions
 ): Promise<void> {
-  const qs = new URLSearchParams({ amount: String(amount) });
+  const qs = new URLSearchParams({ amount: String(amount), userId });
   if (options?.shareKey) qs.set("shareKey", options.shareKey);
   await apiJson(`/api/budget-entries/${projectId}/${entryId}?${qs}`, { method: "DELETE" });
 }

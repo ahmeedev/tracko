@@ -5,30 +5,16 @@ interface AccessOptions {
   shareKey?: string;
 }
 
-/** Polls entries for a project every 3 s. Pass shareKey for unauthenticated (public) access. */
-export function subscribeEntries(
+/** Pass shareKey for unauthenticated (public) access. */
+export async function getEntries(
   projectId: string,
-  onChange: (entries: Entry[]) => void,
-  onError?: (error: Error) => void,
   options?: AccessOptions
-): () => void {
-  let active = true;
+): Promise<Entry[]> {
   const qs = options?.shareKey ? `?shareKey=${encodeURIComponent(options.shareKey)}` : "";
-
-  async function poll() {
-    try {
-      const res = await apiFetch(`/api/entries/${projectId}${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { entries: Entry[] };
-      if (active) onChange(data.entries);
-    } catch (err) {
-      if (active) onError?.(err as Error);
-    }
-  }
-
-  poll();
-  const timer = setInterval(poll, 3000);
-  return () => { active = false; clearInterval(timer); };
+  const res = await apiFetch(`/api/entries/${projectId}${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { entries: Entry[] };
+  return data.entries;
 }
 
 export async function addEntry(
@@ -50,12 +36,13 @@ export async function updateEntry(
   entryId: string,
   input: EntryInput,
   previousAmount: number,
+  userId: string,
   options?: AccessOptions
 ): Promise<void> {
   const qs = options?.shareKey ? `?shareKey=${encodeURIComponent(options.shareKey)}` : "";
   await apiJson(`/api/entries/${projectId}/${entryId}${qs}`, {
     method: "PUT",
-    body: JSON.stringify({ ...input, previousAmount }),
+    body: JSON.stringify({ ...input, previousAmount, userId, shareKey: options?.shareKey }),
   });
 }
 
@@ -63,9 +50,10 @@ export async function deleteEntry(
   projectId: string,
   entryId: string,
   amount: number,
+  userId: string,
   options?: AccessOptions
 ): Promise<void> {
-  const qs = new URLSearchParams({ amount: String(amount) });
+  const qs = new URLSearchParams({ amount: String(amount), userId });
   if (options?.shareKey) qs.set("shareKey", options.shareKey);
   await apiJson(`/api/entries/${projectId}/${entryId}?${qs}`, { method: "DELETE" });
 }
